@@ -3,9 +3,9 @@
 # 配合 codex-pr-review skill 第 5 步。锚点 = PR 最新 commit 的 committedDate(最后一次 push)。
 #
 # 退出码(即结论,agent 按此决定下一步):
-#   0  通过 —— Codex(chatgpt-codex-connector[bot])的 +1(👍)且无晚于锚点的新行内评论
+#   0  通过 —— issue reactions 出现 👍,或 eyes 从"在审查中"消失且该轮无新行内评论
 #   10 有新意见 —— 存在晚于锚点的行内评论,交回 agent triage(回 skill 第 3 步)
-#   20 超时 —— 超过 --max-wait 仍未收到 👍
+#   20 超时 —— 超过 --max-wait 仍未收到通过信号
 #   30 参数/前置错误
 #   31 gh 连续失败(弱网)
 set -uo pipefail
@@ -73,6 +73,7 @@ printf '▶ 轮询 %s/%s #%s\n  锚点 since=%s\n  首等=%ss  间隔=%ss  上�
 deadline=$(( $(date +%s) + MAX_WAIT ))
 fail_streak=0
 first=1
+prev_eyes=no   # 跨轮记忆 eyes 状态;用于检测"eyes 从 yes→no 消失"(审完且无意见)
 
 while :; do
   if [ "$first" = "1" ]; then sleep "$FIRST_WAIT"; first=0
@@ -97,16 +98,31 @@ while :; do
     exit 30
   fi
 
+  # 从 judge 输出解析当前 eyes 状态(每行都带 eyes=yes|no)。
+  cur_eyes=$(printf '%s' "$out" | grep -oE 'eyes=(yes|no)' | head -1 | cut -d= -f2)
+  [ -n "$cur_eyes" ] || cur_eyes=no
+
   ts=$(date +%H:%M:%S)
   case "$out" in
-    STATE=thumbsup*)     echo "[$ts] ✅ $out"; exit 0 ;;
-    STATE=new_comments*) echo "[$ts] 📌 $out —— 有新意见,回 triage"; exit 10 ;;
-    STATE=waiting*)      echo "[$ts] $out" ;;
-    *)                   echo "[$ts] ? 未识别: $out" >&2 ;;
+    STATE=thumbsup*)
+      echo "[$ts] ✅ $out"; exit 0 ;;
+    STATE=new_comments*)
+      echo "[$ts] 📌 $out —— 有新意见,回 triage"; exit 10 ;;
+    STATE=waiting*)
+      # 通过路径 2:eyes 上一轮还在(yes)、本轮消失(no),且本轮无新评论(否则已命中
+      # new_comments 提前返回)——说明 review 者审完且没再提意见。
+      if [ "$prev_eyes" = "yes" ] && [ "$cur_eyes" = "no" ]; then
+        echo "[$ts] ✅ eyes 消失且无新意见 —— review 通过(原 STATE: $out)"; exit 0
+      fi
+      echo "[$ts] $out" ;;
+    *)
+      echo "[$ts] ? 未识别: $out" >&2 ;;
   esac
 
+  prev_eyes=$cur_eyes
+
   if [ "$(date +%s)" -ge "$deadline" ]; then
-    echo "✗ 超过 ${MAX_WAIT}s 未收到 👍,超时。用三端点命令人工核查 Codex 是否在跑(eyes 是否还在)。" >&2
+    echo "✗ 超过 ${MAX_WAIT}s 未收到通过信号,超时。用三端点命令人工核查 review 是否在跑(eyes 是否还在)。" >&2
     exit 20
   fi
 done
