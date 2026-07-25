@@ -16,7 +16,7 @@ usage() {
   <PR>                    PR 编号(位置参数,或 --pr)
   --since <ISO8601>       锚点时间(默认: PR 最新 commit 的 committedDate)
   --first-wait <sec>      首次等待(默认 240;Codex 单次 review 4-6 分钟,不会更快)
-  --interval <sec>        后续轮询间隔(默认 60)
+  --interval <sec>        后续轮询间隔(默认 20;ETag 条件请求下没变化是 304,几乎免费)
   --max-wait <sec>        最大总等待(默认 3600)
   --repo <owner>/<repo>   仓库(默认: 当前 git remote 推断)
 EOF
@@ -25,7 +25,7 @@ EOF
 PR=""
 SINCE=""
 FIRST_WAIT=240
-INTERVAL=60
+INTERVAL=20
 MAX_WAIT=3600
 REPO=""
 
@@ -69,6 +69,13 @@ fi
 
 printf '▶ 轮询 %s/%s #%s\n  锚点 since=%s\n  首等=%ss  间隔=%ss  上限=%ss\n' \
   "$owner" "$repo" "$PR" "$SINCE" "$FIRST_WAIT" "$INTERVAL" "$MAX_WAIT"
+
+# 预取 GitHub token 一次,供 _judge.py 的 curl 条件请求复用(免得每轮都跑 gh auth token)。
+# 依赖 gh 已认证——与原 gh api 方案同前提;传输层换 curl 只为支持 If-None-Match/304,
+# gh api 实测不透传 conditional header(对 If-None-Match 返回 200 + 完整 body)。
+CODX_GH_TOKEN=$(gh auth token 2>/dev/null) \
+  || { echo "ERROR: gh auth token 失败(gh 未认证?)" >&2; exit 30; }
+export CODX_GH_TOKEN
 
 deadline=$(( $(date +%s) + MAX_WAIT ))
 fail_streak=0

@@ -7,7 +7,7 @@
 
 ```bash
 bash <SKILL_DIR>/scripts/poll-until-thumbsup.sh <N>
-# 可选: --since <ISO>  --first-wait 240  --interval 60  --max-wait 3600  --repo <owner/repo>
+# 可选: --since <ISO>  --first-wait 240  --interval 20  --max-wait 3600  --repo <owner/repo>
 ```
 
 `<SKILL_DIR>` = skill 根目录(本 references/ 的上一级,如 `~/.claude/skills/codex-pr-review`)。脚本靠 `BASH_SOURCE` 自定位同目录的 `_judge.py`。
@@ -16,7 +16,7 @@ bash <SKILL_DIR>/scripts/poll-until-thumbsup.sh <N>
 |------|------|------|
 | `--since <ISO8601>` | PR 最新 commit 的 committedDate | 锚点(最后一次 push)。脚本据此区分新/旧评论 |
 | `--first-wait <sec>` | 240 | 首次等待。Codex 单次 review 4-6 分钟,不会更快 |
-| `--interval <sec>` | 60 | 后续轮询间隔 |
+| `--interval <sec>` | 20 | 后续轮询间隔。ETag 下没变化是 304(不计 rate limit),故可加密 |
 | `--max-wait <sec>` | 3600 | 最大总等待,超时退出码 20 |
 | `--repo <owner>/<repo>` | 当前 git remote 推断 | 仓库 |
 
@@ -50,3 +50,6 @@ bash <SKILL_DIR>/scripts/poll-until-thumbsup.sh <N>
 - 跨轮的"eyes 从 yes→no 消失"跳变由 `poll-until-thumbsup.sh` 用 shell 变量 `prev_eyes` 记忆——reactions API 只返回当前存在的反应,没有"曾存在后撤销"的历史,所以只能跨轮比对。
 - 👍 用 `created_at >= since` 过滤,避免把上一轮早已贴的旧 👍 误当本轮通过。
 - 既有晚于锚点的 👍 又有晚于锚点的新评论时,`_judge.py` 优先报 `new_comments`(旧 👍 + 新意见 → 交回 triage)。
+- **传输层是 `curl`,不是 `gh api`**:`gh api` 实测不透传 `If-None-Match`(对 conditional header 直接返回 200 + 完整 body),拿不到 304。`_judge.py` 改用 `curl` + `gh auth token` 的 token;外层 `poll-until-thumbsup.sh` 预取一次 export 为 `CODX_GH_TOKEN`,免得每轮都跑 `gh auth token`。`gh` 仍用于一次性调用(推断 repo、拿 committedDate)。
+- **ETag 条件请求让轮询几乎免费**:每轮带缓存的上次 `ETag` 发 `If-None-Match`,资源没变 GitHub 返回 `304`(不计 rate limit、无 body),此时 `_judge.py` 复用上次缓存的 body 判定——结果与上次该端点完全等价,零传输零解析。这正是默认间隔从 60s 降到 20s 的依据:绝大多数轮次 Codex 还在审,两端点全是 304。
+- 缓存落在 `$TMPDIR/codex-pr-review/<owner>-<repo>-<pr>.json`(含两端点 etag + body),跨轮复用;首次调用无缓存 → 不带条件 → 200 建立缓存。判定的纯逻辑与 ETag 无关,任何端点 200 都会刷新该端点的 body 再判定。

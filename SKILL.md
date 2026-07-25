@@ -73,13 +73,13 @@ gh api repos/<owner>/<repo>/issues/N/reactions
 
 ### 5. 轮询等待 Codex 对新 commit 的再审
 
-推送后 Codex 自动重新审查,**单次 review 通常 4-6 分钟**。用本 skill 自带的轮询脚本守着——它以最后一次 push 为锚,每轮拉 issue reactions + 行内评论两端点,直到出现通过信号或新意见才返回。
+推送后 Codex 自动重新审查,**单次 review 通常 4-6 分钟**。用本 skill 自带的轮询脚本守着——它以最后一次 push 为锚,每轮用 **ETag 条件请求**拉 issue reactions + 行内评论两端点(资源没变时 GitHub 返回 `304`、不计 rate limit、无 body,故默认间隔压到 20s 也几乎免费),直到出现通过信号或新意见才返回。
 
 脚本在 skill 根目录下的 `scripts/` 子目录,**相对本 SKILL.md 所在目录**引用;调用时把它解析成绝对路径(将 skill 的 base directory 拼上 `scripts/poll-until-thumbsup.sh`):
 
 ```bash
 bash <SKILL_DIR>/scripts/poll-until-thumbsup.sh <N>
-# 可选: --since <ISO>  --first-wait 240  --interval 60  --max-wait 3600  --repo <owner/repo>
+# 可选: --since <ISO>  --first-wait 240  --interval 20  --max-wait 3600  --repo <owner/repo>
 ```
 
 `<SKILL_DIR>` = 本 SKILL.md 所在目录(skill 根目录)。脚本从任何 CWD 调用都能定位到 `_judge.py`(自定位机制见 polling.md 实现备忘)。
