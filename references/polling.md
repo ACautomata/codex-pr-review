@@ -6,9 +6,11 @@
 ## 调用
 
 ```bash
-bash ~/.claude/skills/codex-pr-review/poll-until-thumbsup.sh <N>
+bash <SKILL_DIR>/scripts/poll-until-thumbsup.sh <N>
 # 可选: --since <ISO>  --first-wait 240  --interval 60  --max-wait 3600  --repo <owner/repo>
 ```
+
+`<SKILL_DIR>` = skill 根目录(本 references/ 的上一级,如 `~/.claude/skills/codex-pr-review`)。脚本靠 `BASH_SOURCE` 自定位同目录的 `_judge.py`。
 
 | 参数 | 默认 | 说明 |
 |------|------|------|
@@ -32,7 +34,7 @@ bash ~/.claude/skills/codex-pr-review/poll-until-thumbsup.sh <N>
 | `0` | 命中任一通过信号 | 收尾(SKILL.md 第 6 环"收尾审计") |
 | `10` | 检测到晚于锚点的新行内评论 | 回第 3 环 triage,继续走闭环 |
 | `20` | 超过 `--max-wait` 仍无通过信号 | 用三端点人工核查 Codex 是否在跑(eyes 是否还在),再决定继续等或手动触发 |
-| `30` | 参数/前置错误 | 检查 PR 编号、`gh` 是否可用、`_judge.py` 是否在场 |
+| `30` | 参数/前置错误 | 检查 PR 编号、`gh` 是否可用、`scripts/_judge.py` 是否在场 |
 | `31` | `gh` 连续 5 次失败(弱网) | 按 troubleshooting.md 网络排查重试 |
 
 ## 判读口径(脚本内部已实现)
