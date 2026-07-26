@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# poll-until-thumbsup.sh —— 轮询 Codex 对 PR 的再审,直到 issue reactions 出现 👍 才返回。
+# wait —— 等待 Codex 对 PR 的再审。以最后一次 push 为锚,守到通过信号(👍 或 eyes 消失且无新意见)或新意见才返回。
 # 配合 codex-pr-review skill 第 5 步。锚点 = PR 最新 commit 的 committedDate(最后一次 push)。
 #
 # 退出码(即结论,agent 按此决定下一步):
@@ -12,7 +12,7 @@ set -uo pipefail
 
 usage() {
   cat <<'EOF'
-用法: poll-until-thumbsup.sh <PR> [选项]
+用法: wait <PR> [选项]
   <PR>                    PR 编号(位置参数,或 --pr)
   --since <ISO8601>       锚点时间(默认: PR 最新 commit 的 committedDate)
   --first-wait <sec>      首次等待(默认 240;Codex 单次 review 4-6 分钟,不会更快)
