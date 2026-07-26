@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""单次判定 Codex 对 PR 本轮审查的状态。供 poll-until-thumbsup.sh 调用。
+"""单次判定 Codex 对 PR 本轮审查的状态。供 wait 调用。
 
 传输层用 curl + gh token,不用 gh api —— gh api 不透传 If-None-Match,拿不到 304
 (实测它对 conditional header 返回 200 + 完整 body)。改用 curl 后:

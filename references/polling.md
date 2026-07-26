@@ -1,4 +1,4 @@
-# 轮询脚本:参数、退出码与判读口径
+# wait 脚本:参数、退出码与判读口径
 
 > 何时读这份:第 5 环要自定义轮询参数、或拿到非 `0` 退出码需要决定下一步时。
 > 主干工作流(SKILL.md)已给出最常用的直接调用方式;这里是完整参考。
@@ -6,7 +6,7 @@
 ## 调用
 
 ```bash
-bash <SKILL_DIR>/scripts/poll-until-thumbsup.sh <N>
+bash <SKILL_DIR>/scripts/wait <N>
 # 可选: --since <ISO>  --first-wait 240  --interval 20  --max-wait 3600  --repo <owner/repo>
 ```
 
@@ -47,7 +47,7 @@ bash <SKILL_DIR>/scripts/poll-until-thumbsup.sh <N>
 ## 实现备忘(改脚本前看)
 
 - `_judge.py` 是**无状态**单次判定器:拉两端点 → 输出一行 `STATE=...` 且恒带 `eyes=yes|no`。
-- 跨轮的"eyes 从 yes→no 消失"跳变由 `poll-until-thumbsup.sh` 用 shell 变量 `prev_eyes` 记忆——reactions API 只返回当前存在的反应,没有"曾存在后撤销"的历史,所以只能跨轮比对。
+- 跨轮的"eyes 从 yes→no 消失"跳变由 `wait` 用 shell 变量 `prev_eyes` 记忆——reactions API 只返回当前存在的反应,没有"曾存在后撤销"的历史,所以只能跨轮比对。
 - 👍 用 `created_at >= since` 过滤,避免把上一轮早已贴的旧 👍 误当本轮通过。
 - 既有晚于锚点的 👍 又有晚于锚点的新评论时,`_judge.py` 优先报 `new_comments`(旧 👍 + 新意见 → 交回 triage)。
 - **传输层是 `curl`,不是 `gh api`**:`gh api` 实测不透传 `If-None-Match`(对 conditional header 直接返回 200 + 完整 body),拿不到 304。`_judge.py` 改用 `curl` + `gh auth token` 的 token;外层 `poll-until-thumbsup.sh` 预取一次 export 为 `CODX_GH_TOKEN`,免得每轮都跑 `gh auth token`。`gh` 仍用于一次性调用(推断 repo、拿 committedDate)。

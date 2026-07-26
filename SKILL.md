@@ -71,34 +71,36 @@ gh api repos/<owner>/<repo>/issues/N/reactions
 
 **闭环到**:每个根因有修复 + 回归测试,lint/类型/测试全绿,已 push(远端 commit 与本地一致才算交付)。
 
-### 5. 轮询等待 Codex 对新 commit 的再审
+### 5. 调用 wait 脚本等待再审
 
-推送后 Codex 自动重新审查,**单次 review 通常 4-6 分钟**。用本 skill 自带的轮询脚本守着——它以最后一次 push 为锚,每轮用 **ETag 条件请求**拉 issue reactions + 行内评论两端点(资源没变时 GitHub 返回 `304`、不计 rate limit、无 body,故默认间隔压到 20s 也几乎免费),直到出现通过信号或新意见才返回。
-
-脚本在 skill 根目录下的 `scripts/` 子目录,**相对本 SKILL.md 所在目录**引用;调用时把它解析成绝对路径(将 skill 的 base directory 拼上 `scripts/poll-until-thumbsup.sh`):
+直接调用脚本——它以最后一次 push 为锚,每轮用 **ETag 条件请求**拉 issue reactions + 行内评论两端点(资源没变时 GitHub 返回 `304`、不计 rate limit、无 body,故默认间隔压到 20s 也几乎免费),命中通过信号或新意见才返回。**不要自己 `sleep` 轮询或上 Monitor**:等待这件事归脚本,不归你。
 
 ```bash
-bash <SKILL_DIR>/scripts/poll-until-thumbsup.sh <N>
+bash <SKILL_DIR>/scripts/wait <N>
 # 可选: --since <ISO>  --first-wait 240  --interval 20  --max-wait 3600  --repo <owner/repo>
 ```
+```
 
-`<SKILL_DIR>` = 本 SKILL.md 所在目录(skill 根目录)。脚本从任何 CWD 调用都能定位到 `_judge.py`(自定位机制见 polling.md 实现备忘)。
+`<SKILL_DIR>` = 本 SKILL.md 所在目录(skill 根目录)。脚本从任何 CWD 调用都能定位到 `_judge.py`。
 
-**通过信号(满足任一即 exit 0)**:① issue reactions 出现 `+1`(👍,不限发送者,`created_at` 晚于锚点);② `eyes` 从"存在"变"消失"且该轮无新评论。
+| 退出码 | 下一步 |
+|--------|--------|
+| `0` 通过 | 第 6 环收尾 |
+| `10` 新意见 | 回第 3 环 triage |
+| `20` 超时 | 人工核查(eyes 是否还在) |
+| `30`/`31` | 参数错/弱网 → [polling.md](references/polling.md) |
 
-退出码:`0`=通过(进第 6 环);`10`=有新意见(回第 3 环继续闭环);`20`=超时(人工核查);`30`/`31`=参数错/弱网。参数细节、eyes 判读口径、实现备忘见 [references/polling.md](references/polling.md)。
+通过信号怎么判、参数细节、eyes 判读口径、实现备忘见 [references/polling.md](references/polling.md)。
 
-**闭环到**:脚本以 `0` 返回(命中通过信号),或以 `10` 返回并带着新意见回第 3 环。
+**闭环到**:脚本返回 `0`(通过,进第 6 环),或返回 `10` 并带着新意见回第 3 环。
 
 ### 6. 收尾审计
 
-退出闭环前逐项核对:
+脚本以 `0` 返回才进收尾。再核对脚本不管的三项:
 
-- [ ] 通过信号到位:issue reactions 有晚于最后一次 push 的 `+1`(不限发送者),**或**轮询中观察到 `eyes` 从"存在"变"消失"。
-- [ ] 最新 commit 上每条行内评论的 `created_at` 都早于最后一次 push(全部为本轮已处理过的旧意见)。
 - [ ] lint + 类型检查 + 测试全绿。
 - [ ] 改动已 push 到 PR 分支(远端 commit 与本地一致)。
-- [ ] eyes 仍在而仅"没新评论"时,视为仍在审,继续守闭环——等 eyes 消失或 👍 出现再收尾。
+- [ ] 最新 commit 上无晚于最后一次 push 的行内评论(上一轮的新意见都已处理,无残留)。
 
 ## 排错与示例
 
