@@ -73,21 +73,19 @@ gh api repos/<owner>/<repo>/issues/N/reactions
 
 ### 5. 调用 wait 脚本等待再审
 
-直接调用脚本——它以最后一次 push 为锚,每轮用 **ETag 条件请求**拉 issue reactions + 行内评论两端点(资源没变时 GitHub 返回 `304`、不计 rate limit、无 body,故默认间隔压到 20s 也几乎免费),命中通过信号或新意见才返回。**不要自己 `sleep` 轮询或上 Monitor**:等待这件事归脚本,不归你。
+直接调用脚本——它以最后一次 push 为锚,每轮用 **ETag 条件请求**拉 issue reactions + 行内评论两端点(资源没变时 GitHub 返回 `304`、不计 rate limit、故默认间隔 15s 也几乎免费),按显式 4 状态机轮询,命中通过信号或新意见才返回。**不要自己 `sleep` 轮询或上 Monitor**:等待这件事归脚本,不归你。
 
 ```bash
 bash <SKILL_DIR>/scripts/wait <N>
-# 可选: --since <ISO>  --first-wait 240  --interval 20  --max-wait 3600  --repo <owner/repo>
-```
+# 可选: --since <ISO>  --interval 15  --repo <owner/repo>
 ```
 
-`<SKILL_DIR>` = 本 SKILL.md 所在目录(skill 根目录)。脚本从任何 CWD 调用都能定位到 `_judge.py`。
+`<SKILL_DIR>` = 本 SKILL.md 所在目录(skill 根目录)。脚本内部嵌 Python fetcher,无外部文件依赖。
 
 | 退出码 | 下一步 |
 |--------|--------|
 | `0` 通过 | 第 6 环收尾 |
 | `10` 新意见 | 回第 3 环 triage |
-| `20` 超时 | 人工核查(eyes 是否还在) |
 | `30`/`31` | 参数错/弱网 → [polling.md](references/polling.md) |
 
 通过信号怎么判、参数细节、eyes 判读口径、实现备忘见 [references/polling.md](references/polling.md)。

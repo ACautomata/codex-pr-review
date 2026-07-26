@@ -21,7 +21,7 @@ review 由 push 触发(每次推新 commit 就重新审查最新 commit)。**Git
 
 后果:**`commit_id` 不能用来区分新/旧评论**——可能多条评论指向同一个 `commit_id`,其中既有本轮新增也有前几轮的。
 
-**正确做法:用 `created_at` 与锚点(最后一次 push 的 committedDate)比较**。`created_at >= since` 才是本轮新评论。轮询脚本 `_judge.py` 就是这么判的。
+**正确做法:用 `created_at` 与锚点(最后一次 push 的 committedDate)比较**。`created_at >= since` 才是本轮新评论。轮询脚本 `wait` 就是这么判的。
 
 ## 解析范式
 
