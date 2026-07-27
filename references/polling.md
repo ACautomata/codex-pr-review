@@ -15,6 +15,7 @@ bash <SKILL_DIR>/scripts/wait.sh <N>
 | 参数 | 默认 | 说明 |
 |------|------|------|
 | `--since <ISO8601>` | PR 最新 commit 的 committedDate | 锚点(最后一次 push)。据此区分新/旧评论 |
+| `--s0-timeout <sec>` | 120 | S0 超时秒数。push 新代码后 Codex 判断无需再审时不会贴 eyes/👍/评论,超时后视为通过。设为 0 禁用在 S0 无限等待 |
 | `--interval <sec>` | 15 | 轮询间隔。ETag 下没变化是 304(不计 rate limit),间隔仅做 rate limiting |
 | `--repo <owner>/<repo>` | 当前 git remote 推断 | 仓库 |
 
@@ -32,12 +33,15 @@ S0 (IDLE) ─────+                        │ API: eyes 还在 → 留�
                +─ API: 👍 直接出现 → S2 │ API: eyes 消失 + 无新评论 → S2
                |                        │ API: eyes 消失 + 有新评论 → S3
                +─ API: 新评论出现 → S3  │
+               |
+               +─ 超时(s0-timeout) → S2 │(Codex 判断无需再审)
 ```
 
 - **S0 (IDLE)**: PR 刚开/刚 push,Codex 还没开始。轮询观察。
   - eyes 出现 → 进入 S1
   - 👍 直接出现 → exit 0 (Codex 有时跳过 eyes 直接贴 👍)
   - 新评论出现(created_at >= since) → exit 10 (Codex 可能跳过 eyes 直接评论)
+  - 超时(默认 120s) → exit 0 (Codex 认为无需重审,不会贴任何标记)
 - **S1 (WAITING)**: 已确认 eyes 存在过,Codex 正在审查。S1 状态本身编码了"之前见过 eyes"的记忆,无需跨轮 bash `prev_eyes` 变量。
   - eyes 还在 → 留在 S1,继续轮询
   - 👍 出现 → exit 0
@@ -54,7 +58,7 @@ S0 (IDLE) ─────+                        │ API: eyes 还在 → 留�
 
 | 码 | 含义 | 下一步 |
 |----|------|--------|
-| `0` | S2 通过(👍 或 eyes 消失无新评论) | 收尾(SKILL.md 第 6 环"收尾审计") |
+| `0` | S2 通过(👍 或 eyes 消失无新评论 或 S0 超时) | 收尾(SKILL.md 第 6 环"收尾审计") |
 | `10` | S3 有新评论 | 回第 3 环 triage,继续走闭环 |
 | `30` | 参数/前置错误 | 检查 PR 编号、`gh` 是否可用 |
 | `31` | `gh` 连续 5 次失败(弱网) | 按 troubleshooting.md 网络排查重试 |
@@ -63,6 +67,7 @@ S0 (IDLE) ─────+                        │ API: eyes 还在 → 留�
 
 1. **👍** —— issue reactions 端点出现 `+1` 反应(不限定发送者),且 `created_at` 晚于锚点。
 2. **eyes 消失且无新意见** —— 处于 S1 时 API 返回 eyes=no 且没有晚于锚点的新行内评论。
+3. **S0 超时** —— 距锚点超过 `--s0-timeout` 秒(默认 120s)仍无 eyes/👍/新评论,说明 Codex 认为本轮改动无需再审。
 
 ## 实现备忘(改脚本前看)
 

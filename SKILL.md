@@ -97,7 +97,7 @@ gh api repos/<owner>/<repo>/issues/$pr/reactions
 
 ```bash
 bash <SKILL_DIR>/scripts/wait.sh <$pr>
-# 可选: --since <ISO>  --interval 15  --repo <owner/repo>
+# 可选: --since <ISO>  --s0-timeout <sec>  --interval 15  --repo <owner/repo>
 ```
 
 `<SKILL_DIR>` = 本 SKILL.md 所在目录(skill 根目录)。脚本内部嵌 Python fetcher,无外部文件依赖。

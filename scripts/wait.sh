@@ -5,6 +5,7 @@
 #   S0(IDLE) ── eyes 出现 ──→ S1(WAITING)
 #   S0 ── 👍 ──→ S2(PASS)
 #   S0 ── 新评论 ──→ S3(NEW_COMMENTS)
+#   S0 ── 超时(默认 120s) ──→ S2(PASS: Codex 无需再审)
 #   S1 ── eyes 还在 ──→ S1
 #   S1 ── 👍 ──→ S2
 #   S1 ── eyes 消失 + 无新评论 ──→ S2
@@ -22,6 +23,7 @@ usage() {
 用法: wait <PR> [选项]
   <PR>                    PR 编号(位置参数,或 --pr)
   --since <ISO8601>       锚点时间(默认: PR 最新 commit 的 committedDate)
+  --s0-timeout <sec>      S0 超时退出(默认 120;Codex 不贴 eyes/👍/评论=认为无需再审)
   --interval <sec>        轮询间隔(默认 15;ETag 下没变化是 304,几乎免费)
   --repo <owner>/<repo>   仓库(默认: 当前 git remote 推断)
 EOF
@@ -29,6 +31,7 @@ EOF
 
 PR=""
 SINCE=""
+S0_TIMEOUT=120
 INTERVAL=15
 REPO=""
 
@@ -36,6 +39,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --pr)         PR="$2"; shift 2;;
     --since)      SINCE="$2"; shift 2;;
+    --s0-timeout) S0_TIMEOUT="$2"; shift 2;;
     --interval)   INTERVAL="$2"; shift 2;;
     --repo)       REPO="$2"; shift 2;;
     -h|--help)    usage; exit 0;;
@@ -173,6 +177,7 @@ print(f"EYES={eyes_now}")
 print(f"PLUS1={plus1_who}")
 print(f"NEW_COUNT={len(new_comments)}")
 print(f"REACTIONS_TOTAL={len(reactions)}")
+print(f"ELAPSED={int((datetime.datetime.now(datetime.timezone.utc) - since_dt).total_seconds())}")
 PYEOF
 }
 
@@ -207,9 +212,11 @@ while :; do
   eyes=$(printf '%s' "$fetcher_out"    | grep '^EYES='       | cut -d= -f2)
   plus1=$(printf '%s' "$fetcher_out"   | grep '^PLUS1='      | cut -d= -f2)
   new_count=$(printf '%s' "$fetcher_out" | grep '^NEW_COUNT='  | cut -d= -f2)
+  elapsed=$(printf '%s' "$fetcher_out"  | grep '^ELAPSED='    | cut -d= -f2)
 
   [ -n "$eyes" ]      || eyes=no
   [ -n "$new_count" ] || new_count=0
+  [ -n "$elapsed" ]   || elapsed=0
   ts=$(date +%H:%M:%S)
 
   # ── 状态转移(不依赖时间,全由 API 查询结果驱动) ──
@@ -225,8 +232,11 @@ while :; do
     elif [ "$new_count" -gt 0 ]; then
       echo "  [$ts] [S0→S3] 📌 ${new_count} 条新评论 —— 回 triage"
       exit 10
+    elif [ "$elapsed" -ge "$S0_TIMEOUT" ]; then
+      echo "  [$ts] [S0→S2] ✅ S0 超时 ${elapsed}s(limit=${S0_TIMEOUT}s),Codex 认为无需再审 —— 通过"
+      exit 0
     else
-      echo "  [$ts] [S0] eyes=no  等待 Codex 开始…"
+      echo "  [$ts] [S0] eyes=no  elapsed=${elapsed}s  等待 Codex 开始…"
     fi
 
   elif [ "$state" = "S1" ]; then
