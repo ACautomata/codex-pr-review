@@ -1,6 +1,6 @@
 ---
 name: codex-pr-review
-description: 响应 GitHub PR 上 Codex(chatgpt-codex-connector[bot])的自动 review,把"triage 意见→修复→推送→轮询再审"跑成收敛闭环,直到出现通过信号(👍 反应,或 eyes 消失且无新意见)才退出。触发:用户提到 codex、自动代码审查 bot 的 PR 意见或反应、或要让 codex review 收敛到通过。
+description: Codex 自动 PR review 收敛闭环——拉 Codex(chatgpt-codex-connector[bot])的审查意见,triage→修复→推送→轮询再审,直到通过。触发:用户提到 codex review / codex bot 意见 / 让审查通过。
 argument-hint: pr
 arguments: 
   - pr
@@ -82,6 +82,7 @@ gh api repos/<owner>/<repo>/issues/$pr/reactions
 ### 4. 修复 + 验证 + 推送
 
 - 按全局规划实施修复(一个连贯改动覆盖同根因的意见组)。
+- 调用`tdd` skill进行修复
 - 跑仓库约定的 lint、类型检查、测试(常见 `ruff`/`mypy`/`pytest`)。
 - 每个根因配一个回归测试(用 dummy/stub/fixture 隔离重资源与外部依赖)。
 - commit message:`fix(<scope>): <一句话> (codex #$pr)`,正文写清修了什么、根因、加了哪些测试。
@@ -95,7 +96,7 @@ gh api repos/<owner>/<repo>/issues/$pr/reactions
 直接调用脚本——它以最后一次 push 为锚,每轮用 **ETag 条件请求**拉 issue reactions + 行内评论两端点(资源没变时 GitHub 返回 `304`、不计 rate limit、故默认间隔 15s 也几乎免费),按显式 4 状态机轮询,命中通过信号或新意见才返回。**不要自己 `sleep` 轮询或上 Monitor**:等待这件事归脚本,不归你。
 
 ```bash
-bash <SKILL_DIR>/scripts/wait <$pr>
+bash <SKILL_DIR>/scripts/wait.sh <$pr>
 # 可选: --since <ISO>  --interval 15  --repo <owner/repo>
 ```
 

@@ -6,7 +6,7 @@
 ## 调用
 
 ```bash
-bash <SKILL_DIR>/scripts/wait <N>
+bash <SKILL_DIR>/scripts/wait.sh <N>
 # 可选: --since <ISO>  --interval 15  --repo <owner/repo>
 ```
 
